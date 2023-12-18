@@ -15,7 +15,6 @@ jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
-    steps:
     linters:
       # only enable the linters listed below
       disable-all: true
@@ -56,6 +55,7 @@ jobs:
 
         # parse and typecheck code
         - typecheck
+    steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
