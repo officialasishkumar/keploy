@@ -16,7 +16,7 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-    - linters:
+    linters:
       # only enable the linters listed below
       disable-all: true
       enable:

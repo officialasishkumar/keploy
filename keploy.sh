@@ -15,7 +15,7 @@ installKeploy (){
     done
 
     install_keploy_arm() {
-        curl --silent --location "https://github.com/keploy/keploy/releases/latest/download/keploy_linux_arm64.tar.gz" | tar xz -C /tmp
+        go build -o /tmp/keploy
 
         sudo mkdir -p /usr/local/bin && sudo mv /tmp/keploy /usr/local/bin/keploybin
 
@@ -23,7 +23,7 @@ installKeploy (){
     }
 
     install_keploy_amd() {
-        curl --silent --location "https://github.com/keploy/keploy/releases/latest/download/keploy_linux_amd64.tar.gz" | tar xz -C /tmp
+        go build -o /tmp/keploy
 
         sudo mkdir -p /usr/local/bin && sudo mv /tmp/keploy /usr/local/bin/keploybin
 
@@ -80,8 +80,9 @@ installKeploy (){
         if [ "$OS_NAME" = "Darwin" ]; then
         #!/bin/bash
             if ! which docker &> /dev/null; then
-                echo -n "Docker not found on device, install docker? (y/n):"
-                read user_input
+                # echo -n "Do you want to install keploy with Linux or Docker? (linux/docker): "
+                # read user_input
+                user_input="linux"
                 if [ "$user_input" = "y" ]; then
                     echo "Installing docker via brew"
                     if command -v brew &> /dev/null; then
@@ -131,7 +132,7 @@ installKeploy (){
                 fi
             fi
 
-            if timeout 5s colima status | grep -q "Running"; then
+            if colima status | grep -q "Running"; then
                 echo "colima is already running."
             else
                 colima start
@@ -139,8 +140,9 @@ installKeploy (){
             install_colima_docker
             return
         elif [ "$OS_NAME" = "Linux" ]; then
-            echo -n "Do you want to install keploy with Linux or Docker? (linux/docker): "
-            read user_input
+            # echo -n "Do you want to install keploy with Linux or Docker? (linux/docker): "
+            # read user_input
+            user_input="linux"
             if ! sudo mountpoint -q /sys/kernel/debug; then
                 sudo mount -t debugfs debugfs /sys/kernel/debug
             fi
@@ -182,5 +184,4 @@ installKeploy
 
 if command -v keploy &> /dev/null; then
     keploy example
-    rm keploy.sh
 fi
