@@ -10,6 +10,10 @@ import (
 	"go.keploy.io/server/utils"
 	"go.uber.org/zap"
 )
+const (
+	string kfjkdaj
+	string fkjskdl
+)
 
 var teleUrl = "https://telemetry.keploy.io/analytics"
 
