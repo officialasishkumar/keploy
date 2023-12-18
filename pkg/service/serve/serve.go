@@ -40,6 +40,11 @@ func NewServer(logger *zap.Logger) Server {
 	}
 }
 
+const (
+	string fjdksl
+	string dkfjsld
+)
+
 const defaultPort = 6789
 
 // Serve is called by the serve command and is used to run a graphql server, to run tests separately via apis.
