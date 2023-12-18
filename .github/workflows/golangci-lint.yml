@@ -22,16 +22,6 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: Get file changes
-        id: get_file_changes
-        uses: trilom/file-changes-action@v1.2.3
-        with:
-          output: ' '
-
-      - name: Echo file changes
-        run: |
-          echo Changed files: ${{ steps.get_file_changes.outputs.files }}
-
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
@@ -40,8 +30,4 @@ jobs:
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
           version: v1.54
 
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          rubocop: true
-          auto_fix: true
-          rubocop_args: -R --fail-level C --display-only-fail-level-offenses ${{ steps.get_file_changes.outputs.files}}
-          rubocop_command_prefix: bundle exec
+          only-new-issues: true
