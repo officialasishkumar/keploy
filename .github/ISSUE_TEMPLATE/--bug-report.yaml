@@ -61,16 +61,20 @@ body:
     label: Repository
     options:
       - keploy
+      - go-sdk
       - java-sdk
-      - samples-java
+      - python-sdk
       - typescript-sdk
-      - samples-typescript
       - docs
       - website
+      - blog-website
       - ui
-      - python-sdk
-      - go-sdk
       - samples-go
+      - samples-java
+      - samples-rust
+      - samples-python
+      - samples-csharp
+      - samples-typescript
   validations:
     required: true
 - type: markdown
