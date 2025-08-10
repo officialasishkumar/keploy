@@ -98,9 +98,16 @@ for i in {1..2}; do
     echo "Recorded test case and mocks for iteration ${i}"
 done
 
+echo "Resetting database state for a clean test environment..."
+docker compose down
+docker compose up -d
+# Add a delay to ensure the database is fully initialized before starting the test
+sleep 15 
+
 # Testing phase
 echo "Starting testing phase..."
 sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $REPLAY_BIN test -c "python3 demo.py" --delay 10 &> test_logs.txt
+
 
 if grep "ERROR" "test_logs.txt"; then
     echo "Error found in pipeline..."

@@ -120,7 +120,7 @@ fi
 
 all_passed=true
 # The number of loops should match the number of recording sessions
-for i in {0..1}; do
+for i in {1..2}; do
     report_file="./keploy/reports/test-run-0/test-set-$i-report.yaml"
      if [ ! -f "$report_file" ]; then
         echo "Report file not found: $report_file"
@@ -131,7 +131,6 @@ for i in {0..1}; do
     test_status=$(grep 'status:' "$report_file" | head -n 1 | awk '{print $2}')
     echo "Test status for test-set-$i: $test_status"
     
-    # --- THIS IS THE CORRECTED LOGIC ---
     # Fail the build only if the status is explicitly FAILED.
     if [ "$test_status" == "FAILED" ]; then
         all_passed=false
