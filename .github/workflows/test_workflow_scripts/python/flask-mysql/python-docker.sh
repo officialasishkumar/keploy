@@ -3,7 +3,7 @@
 # This script assumes a similar folder structure to the example provided.
 # .github/workflows/test_workflow_scripts/python/django_postgres/
 # Modify the source path if your structure is different.
-source ./../../.github/workflows/test_workflow_scripts/test-iid.sh
+source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 
 # Create a shared network for Keploy and the application containers
 docker network create keploy-network || true
