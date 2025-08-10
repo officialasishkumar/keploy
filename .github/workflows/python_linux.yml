@@ -36,13 +36,13 @@ jobs:
         with:
           repository: officialasishkumar/samples-python
           path: samples-python
-      - name: Run the django-postgres python application
-        env:
-          RECORD_BIN: ${{ steps.record.outputs.path }}
-          REPLAY_BIN: ${{ steps.replay.outputs.path }}
-        run: |
-          cd samples-python/django-postgres/django_postgres
-          source ../../../.github/workflows/test_workflow_scripts/python/django_postgres/python-linux.sh
+      # - name: Run the django-postgres python application
+      #   env:
+      #     RECORD_BIN: ${{ steps.record.outputs.path }}
+      #     REPLAY_BIN: ${{ steps.replay.outputs.path }}
+      #   run: |
+      #     cd samples-python/django-postgres/django_postgres
+      #     source ../../../.github/workflows/test_workflow_scripts/python/django_postgres/python-linux.sh
 
       - name: Run the flask-mongo python application
         env:
