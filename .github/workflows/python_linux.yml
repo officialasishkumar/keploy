@@ -50,4 +50,4 @@ jobs:
           REPLAY_BIN: ${{ steps.replay.outputs.path }}
         run: |
           cd samples-python/flask-mysql
-          source ./test_workflow_scripts/python/flask-mysql/python-linux.sh
+          source ../../.github/workflows/test_workflow_scripts/python/flask-mysql/python-linux.sh
