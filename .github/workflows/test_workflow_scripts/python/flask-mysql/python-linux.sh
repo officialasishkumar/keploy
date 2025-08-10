@@ -102,7 +102,7 @@ echo "Resetting database state for a clean test environment..."
 docker compose down
 docker compose up -d
 # Add a delay to ensure the database is fully initialized before starting the test
-sleep 15 
+sleep 5
 
 # Testing phase
 echo "Starting testing phase..."
