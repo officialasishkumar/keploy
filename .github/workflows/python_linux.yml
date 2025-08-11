@@ -8,14 +8,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Define the unique properties of each application test
         app:
           - name: django-postgres
-            path: django-postgres/django_postgres
+            path: django-postgres
+            script_dir: django_postgres
           - name: flask-mysql
             path: flask-mysql
+            script_dir: flask-mysql
           - name: flask-mysql-jwt
             path: flask-mysql_app
+            script_dir: flask-mysql_app # Use the actual directory name here
 
+        # Your existing matrix for record/replay sources
         include:
           - job: record_latest_replay_build
             record_src: latest
@@ -27,7 +32,6 @@ jobs:
             record_src: build
             replay_src: build
 
-    # The job name will now be dynamic, e.g., "django-postgres (record_build_replay_latest)"
     name: ${{ matrix.app.name }} (${{ matrix.job }})
     steps:
       - name: Checkout repository
@@ -54,8 +58,6 @@ jobs:
           RECORD_BIN: ${{ steps.record.outputs.path }}
           REPLAY_BIN: ${{ steps.replay.outputs.path }}
         run: |
-          # Use the path from the matrix to navigate to the correct directory
           cd samples-python/${{ matrix.app.path }}
-
-          # The source path is now also dynamic
-          source ../../.github/workflows/test_workflow_scripts/python/${{ matrix.app.name }}/python-linux.sh
+          
+          source $GITHUB_WORKSPACE/.github/workflows/test_workflow_scripts/python/${{ matrix.app.script_dir }}/python-linux.sh
