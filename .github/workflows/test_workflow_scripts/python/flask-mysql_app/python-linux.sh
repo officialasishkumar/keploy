@@ -78,10 +78,10 @@ send_request(){
     # Wait for the application to be fully started
     sleep 10
     app_started=false
-    echo "Checking for app readiness on port 5001..."
+    echo "Checking for app readiness on port 5000..."
     while [ "$app_started" = false ]; do
-        # App runs on port 5001 as per main.py
-        if curl -s --head http://127.0.0.1:5001/ > /dev/null; then
+        # App runs on port 5000 as per main.py
+        if curl -s --head http://127.0.0.1:5000/ > /dev/null; then
             app_started=true
             echo "App is ready!"
         fi
@@ -92,7 +92,7 @@ send_request(){
     echo "Logging in to get JWT token..."
     TOKEN=$(curl -s -X POST -H "Content-Type: application/json" \
         -d '{"username": "admin", "password": "admin123"}' \
-        "http://127.0.0.1:5001/login" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+        "http://127.0.0.1:5000/login" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 
     if [ -z "$TOKEN" ]; then
         echo "Failed to retrieve JWT token. Aborting."
@@ -106,13 +106,13 @@ send_request(){
     echo "Sending API requests..."
     curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
         -d '{"name": "Keyboard", "quantity": 50, "price": 75.00, "description": "Mechanical keyboard"}' \
-        'http://127.0.0.1:5001/robust-test/create'
+        'http://127.0.0.1:5000/robust-test/create'
 
     curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
         -d '{"name": "Webcam", "quantity": 30}' \
-        'http://127.0.0.1:5001/robust-test/create-with-null'
+        'http://127.0.0.1:5000/robust-test/create-with-null'
 
-    curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5001/robust-test/get-all'
+    curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/robust-test/get-all'
     
     # Wait for 10 seconds for keploy to record the tcs and mocks.
     sleep 10
