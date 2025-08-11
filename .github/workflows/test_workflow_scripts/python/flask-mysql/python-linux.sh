@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# This script assumes a similar folder structure to the example provided.
-# Modify the source path if your structure is different.
 source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 
 # Create a shared network for Keploy and the application containers
@@ -25,7 +23,55 @@ export DB_NAME=demo
 sudo $RECORD_BIN config --generate
 sudo rm -rf keploy/  # Clean old test data
 config_file="./keploy.yml"
-sed -i 's/global: {}/global: {"header": {"Allow":[]}}/' "$config_file"
+
+# Idempotently add/update the globalNoise configuration in keploy.yml
+# This awk script finds the `test:` block, replaces any existing `globalNoise`
+# block within it with the desired configuration. This prevents duplicates.
+temp_file=$(mktemp)
+sudo awk '
+    # state: 0=normal, 1=in_test_block, 2=skipping_old_noise
+    BEGIN { state=0 }
+
+    # Rule 1: When we find the "test:" line...
+    /^test:/ {
+        print                                       # Print "test:"
+        print "    globalNoise:"                      # Print our new block
+        print "        global:"
+        print "            body:"
+        print "                access_token: []"
+        print "            header:"
+        print "                server: []"
+        print "        test-sets: {}"
+        state=1                                     # Enter state 1 (we are inside the test block)
+        next                                        # Skip to the next line of input
+    }
+
+    # Rule 2: If we are in state 1 and see the start of an old noise block...
+    state==1 && /^\s+globalNoise:/ {
+        state=2                                     # Enter state 2 (start skipping)
+        next                                        # Skip this line
+    }
+
+    # Rule 3: If we are in state 2 (skipping) and the line is still indented...
+    state==2 && /^\s{5,}/ {
+        next                                        # ...keep skipping.
+    }
+
+    # Rule 4: If we are in state 2 and the line is no longer indented enough...
+    state==2 && !/^\s{5,}/ {
+        state=1                                     # ...the old block is over. Go back to state 1.
+    }
+    
+    # Rule 5: If we are in state 1 and see a non-indented line...
+    state==1 && !/^\s+/ {
+        state=0                                     # ...we have left the test block. Go back to state 0.
+    }
+
+    # Default Action: Print the current line. This runs for any line that was not skipped.
+    { print }
+' "$config_file" > "$temp_file"
+sudo mv "$temp_file" "$config_file"
+
 sleep 5  # Allow time for configuration changes
 
 send_request(){
