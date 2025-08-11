@@ -100,7 +100,7 @@ for i in {1..2}; do
 done
 
 
-cho "Resetting database state for a clean test environment..."
+echo "Resetting database state for a clean test environment..."
 docker compose down
 docker compose up -d
 
