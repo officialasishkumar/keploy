@@ -160,6 +160,7 @@ for attempt in {1..5}; do
         docker compose down
         exit 0 # Exit the entire script successfully
     else
+        echo "the exit code is $TEST_EXIT_CODE"
         echo "❌ Test Attempt ${attempt} Failed."
         if [ "$attempt" -lt 5 ]; then
             echo "Retrying..."
