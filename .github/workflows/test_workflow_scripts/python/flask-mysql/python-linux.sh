@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # This script assumes a similar folder structure to the example provided.
-# .github/workflows/test_workflow_scripts/python/django_postgres/
 # Modify the source path if your structure is different.
 source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 
@@ -9,7 +8,7 @@ source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 docker network create keploy-network || true
 
 
-# Start the postgres database
+# Start the database
 docker compose up -d
 
 # Install dependencies
@@ -77,7 +76,7 @@ send_request(){
     sudo kill "$pid"
 }
 
-# Record and Test cycles
+# Record cycles
 for i in {1..2}; do
     app_name="flask-mysql-app-native-${i}"
     send_request &
@@ -85,7 +84,7 @@ for i in {1..2}; do
     sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $RECORD_BIN record -c "python3 demo.py" &> "${app_name}.txt"
     
     if grep "ERROR" "${app_name}.txt"; then
-        echo "Error found in pipeline..."
+        echo "Error found in recording..."
         cat "${app_name}.txt"
         exit 1
     fi
@@ -100,12 +99,15 @@ for i in {1..2}; do
 done
 
 
-# Sanity: ensure we actually have recorded tests before starting attempts
-if [ ! -d "./keploy/tests" ]; then
-  echo "No recorded tests found in ./keploy/tests. Did recording succeed?"
-  ls -la ./keploy || true
+# Sanity: ensure we actually have recorded tests by checking for test-set-* directories
+if [ -z "$(ls -d ./keploy/test-set-* 2>/dev/null)" ]; then
+  echo "No recorded test sets (e.g., test-set-0) found in ./keploy/. Did recording succeed?"
+  echo "Contents of ./keploy/ directory:"
+  ls -la ./keploy || echo "./keploy directory not found."
   exit 1
 fi
+
+echo "✅ Sanity check passed. Found recorded test sets."
 
 echo "Starting testing phase with up to 5 attempts..."
 
@@ -153,7 +155,6 @@ for attempt in {1..5}; do
     echo "-------------------------------------------"
 
     # Check for success conditions: exit code 0 AND no 'ERROR' or 'DATA RACE' strings.
-    # `grep -q` returns 0 if found, 1 if not. We want the check to succeed if grep returns 1.
     if [ $TEST_EXIT_CODE -eq 0 ] && ! grep -q "ERROR" "${log_file}" && ! grep -q "WARNING: DATA RACE" "${log_file}"; then
         echo "✅ Test Attempt ${attempt} Succeeded! No errors found."
         docker compose down
