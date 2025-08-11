@@ -5,7 +5,6 @@ source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 # Create a shared network for Keploy and the application containers
 docker network create keploy-network || true
 
-
 # Start the database
 docker compose up -d
 
@@ -81,7 +80,7 @@ send_request(){
     echo "Checking for app readiness on port 5000..."
     while [ "$app_started" = false ]; do
         # App runs on port 5000 as per main.py
-        if curl -s --head http://127.0.0.1:5000/ > /dev/null; then
+        if curl -s --head http://127.0.0.1:5000/health > /dev/null; then
             app_started=true
             echo "App is ready!"
         fi
@@ -90,29 +89,92 @@ send_request(){
     
     # 1. Login to get the JWT token
     echo "Logging in to get JWT token..."
-    TOKEN=$(curl -s -X POST -H "Content-Type: application/json" \
+    TOKEN_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
         -d '{"username": "admin", "password": "admin123"}' \
-        "http://127.0.0.1:5000/login" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+        "http://127.0.0.1:5000/login")
+    
+    TOKEN=$(echo "$TOKEN_RESPONSE" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 
-    if [ -z "$TOKEN" ]; then
-        echo "Failed to retrieve JWT token. Aborting."
+    if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+        echo "Failed to retrieve JWT token. Response: $TOKEN_RESPONSE"
         pid=$(pgrep keploy)
         sudo kill "$pid"
         exit 1
     fi
-    echo "Token received."
+    echo "Token received: ${TOKEN:0:20}..."
     
     # 2. Start making curl calls to record the testcases and mocks.
     echo "Sending API requests..."
-    curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-        -d '{"name": "Keyboard", "quantity": 50, "price": 75.00, "description": "Mechanical keyboard"}' \
-        'http://127.0.0.1:5000/robust-test/create'
+    
+    # Basic data creation (from curls.sh)
+    echo "Creating data entry..."
+    curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+        -d '{"message": "hello world"}' \
+        'http://127.0.0.1:5000/data'
 
-    curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-        -d '{"name": "Webcam", "quantity": 30}' \
-        'http://127.0.0.1:5000/robust-test/create-with-null'
+    # Get all data
+    echo "Getting all data..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/data'
 
-    curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/robust-test/get-all'
+    # Complex queries endpoint (from curls.sh)
+    echo "Hitting complex queries endpoint..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/generate-complex-queries'
+
+    # System status endpoint
+    echo "Getting system status..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/system/status'
+
+    # Migrations endpoint
+    echo "Getting migrations..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/system/migrations'
+
+    # API log creation
+    echo "Creating API log..."
+    curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+        -d '{"event": "test_log", "details": "This is a test log entry"}' \
+        'http://127.0.0.1:5000/logs'
+
+    # Client summary report
+    echo "Getting client summary report..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/reports/client-summary'
+
+    # Full financial summary
+    echo "Getting full financial summary..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/reports/full-financial-summary'
+
+    # Search clients
+    echo "Searching clients..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/search/clients?q=Global'
+
+    # Token check
+    echo "Checking token..."
+    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/auth/check-token/9522d59c56404995af98d4c30bde72b3'
+
+    # Transfer funds (valid transaction)
+    echo "Testing fund transfer..."
+    curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+        -d '{"from_account_id": 1, "to_account_id": 2, "amount": "100.50"}' \
+        'http://127.0.0.1:5000/transactions/transfer'
+
+    # Concurrent load testing simulation (reduced scale for recording)
+    echo "Running concurrent requests simulation..."
+    for i in {1..5}; do
+        # Parallel data creation
+        curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+            -d "{\"message\": \"Load test message $i\"}" \
+            'http://127.0.0.1:5000/data' &
+        
+        # Parallel system status checks
+        curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/system/status' &
+        
+        # Parallel log creation
+        curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+            -d "{\"event\": \"concurrent_test\", \"details\": \"Concurrent test $i\"}" \
+            'http://127.0.0.1:5000/logs' &
+    done
+    
+    # Wait for all background jobs to complete
+    wait
     
     # Wait for 10 seconds for keploy to record the tcs and mocks.
     sleep 10
@@ -143,7 +205,6 @@ for i in {1..2}; do
     wait # Wait for send_request to finish
     echo "Recorded test case and mocks for iteration ${i}"
 done
-
 
 # Sanity: ensure we actually have recorded tests by checking for test-set-* directories
 if [ -z "$(ls -d ./keploy/test-set-* 2>/dev/null)" ]; then
