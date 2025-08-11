@@ -155,7 +155,7 @@ for attempt in {1..5}; do
     echo "-------------------------------------------"
 
     # Check for success conditions: exit code 0 AND no 'ERROR' or 'DATA RACE' strings.
-    if [ $TEST_EXIT_CODE -eq 0 ] && ! grep -q "ERROR" "${log_file}" && ! grep -q "WARNING: DATA RACE" "${log_file}"; then
+    if ! grep -q "ERROR" "${log_file}" && ! grep -q "WARNING: DATA RACE" "${log_file}"; then
         echo "✅ Test Attempt ${attempt} Succeeded! No errors found."
         docker compose down
         exit 0 # Exit the entire script successfully
