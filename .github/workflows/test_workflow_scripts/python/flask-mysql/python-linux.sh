@@ -154,18 +154,51 @@ for attempt in {1..5}; do
     cat "${log_file}"
     echo "-------------------------------------------"
 
-    # Check for success conditions: exit code 0 AND no 'ERROR' or 'DATA RACE' strings.
-    if ! grep -q "ERROR" "${log_file}" && ! grep -q "WARNING: DATA RACE" "${log_file}"; then
-        echo "✅ Test Attempt ${attempt} Succeeded! No errors found."
-        docker compose down
-        exit 0 # Exit the entire script successfully
-    else
-        echo "the exit code is $TEST_EXIT_CODE"
-        echo "❌ Test Attempt ${attempt} Failed."
+    # Check for generic errors or data races in logs first
+    if grep -q "ERROR" "${log_file}" || grep -q "WARNING: DATA RACE" "${log_file}"; then
+        echo "❌ Test Attempt ${attempt} Failed. Found ERROR or DATA RACE in logs."
         if [ "$attempt" -lt 5 ]; then
             echo "Retrying..."
-            sleep 5 # Wait a bit before the next loop
+            sleep 5
+            continue
+        else
+            break
         fi
+    fi
+    
+    # Check individual test reports for PASSED status
+    all_passed_in_attempt=true
+    # The recording loop runs twice {1..2}, so we expect test-set-0 and test-set-1
+    for i in {0..1}; do
+        report_file="./keploy/reports/test-run-0/test-set-$i-report.yaml"
+
+        if [ ! -f "$report_file" ]; then
+            echo "Report file not found for test-set-$i. Marking attempt as failed."
+            all_passed_in_attempt=false
+            break
+        fi
+
+        test_status=$(grep 'status:' "$report_file" | head -n 1 | awk '{print $2}')
+        echo "Test status for test-set-$i: $test_status"
+
+        if [ "$test_status" != "PASSED" ]; then
+            all_passed_in_attempt=false
+            echo "Test-set-$i did not pass."
+            break
+        fi
+    done
+
+    if [ "$all_passed_in_attempt" = true ]; then
+        echo "✅ All tests passed on attempt ${attempt}!"
+        docker compose down
+        exit 0 # Successful exit from the script
+    fi
+
+    # If we reach here, the attempt failed.
+    echo "❌ Test Attempt ${attempt} Failed. Not all reports were PASSED."
+    if [ "$attempt" -lt 5 ]; then
+        echo "Retrying..."
+        sleep 5
     fi
 done
 
