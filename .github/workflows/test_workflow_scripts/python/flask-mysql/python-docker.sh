@@ -3,7 +3,9 @@
 # This script assumes a similar folder structure to the example provided.
 # .github/workflows/test_workflow_scripts/python/django_postgres/
 # Modify the source path if your structure is different.
+
 source ../../.github/workflows/test_workflow_scripts/test-iid.sh
+
 
 # Create a shared network for Keploy and the application containers
 docker network create keploy-network || true
@@ -120,6 +122,7 @@ fi
 
 all_passed=true
 # The number of loops should match the number of recording sessions
+
 for i in {1..2}; do
     report_file="./keploy/reports/test-run-0/test-set-$i-report.yaml"
      if [ ! -f "$report_file" ]; then
@@ -141,6 +144,7 @@ done
 
 # Check the overall test status and exit accordingly
 if [ "$all_passed" = true ]; then
+
     echo "All tests passed (or were ignored). Build successful."
     docker compose down
     exit 0
@@ -150,3 +154,4 @@ else
     docker compose down
     exit 1
 fi
+

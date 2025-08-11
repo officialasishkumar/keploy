@@ -8,6 +8,7 @@ source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 # Create a shared network for Keploy and the application containers
 docker network create keploy-network || true
 
+
 # Start the postgres database
 docker compose up -d
 
@@ -98,6 +99,7 @@ for i in {1..2}; do
     echo "Recorded test case and mocks for iteration ${i}"
 done
 
+
 echo "Resetting database state for a clean test environment..."
 docker compose down
 docker compose up -d
@@ -107,7 +109,6 @@ sleep 5
 # Testing phase
 echo "Starting testing phase..."
 sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $REPLAY_BIN test -c "python3 demo.py" --delay 10 &> test_logs.txt
-
 
 if grep "ERROR" "test_logs.txt"; then
     echo "Error found in pipeline..."
@@ -137,6 +138,7 @@ for i in {0..1}; do
     if [ "$test_status" == "FAILED" ]; then
         all_passed=false
         echo "Test-set-$i has FAILED."
+
         break
     fi
 done
