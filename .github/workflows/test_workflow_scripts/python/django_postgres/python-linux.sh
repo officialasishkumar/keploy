@@ -3,8 +3,8 @@
 source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 
 # Checkout to the specified branch
-git fetch origin
-git checkout native-linux
+# git fetch origin
+# git checkout native-linux
 
 # Start the postgres database
 docker compose up -d
