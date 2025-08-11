@@ -92,8 +92,8 @@ send_request(){
     TOKEN_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
         -d '{"username": "admin", "password": "admin123"}' \
         "http://127.0.0.1:5000/login")
-    
-    TOKEN=$(echo "$TOKEN_RESPONSE" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+
+    TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r .access_token)
 
     if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
         echo "Failed to retrieve JWT token. Response: $TOKEN_RESPONSE"
