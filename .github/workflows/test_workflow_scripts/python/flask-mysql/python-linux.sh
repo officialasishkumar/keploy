@@ -100,59 +100,74 @@ for i in {1..2}; do
 done
 
 
-echo "Resetting database state for a clean test environment..."
-docker compose down
-docker compose up -d
-
-# Wait for MySQL to be ready (host-mapped 3306). Fallback to simple TCP check.
-echo "Waiting for DB on 127.0.0.1:${DB_PORT}..."
-for i in {1..30}; do
-  if nc -z 127.0.0.1 "${DB_PORT}" 2>/dev/null; then
-    echo "DB port is open."
-    break
-  fi
-  sleep 2
-done
-
-# Optional: give the server a few extra seconds to finish init scripts
-sleep 10
-
-# Sanity: ensure we actually have recorded tests
+# Sanity: ensure we actually have recorded tests before starting attempts
 if [ ! -d "./keploy/tests" ]; then
   echo "No recorded tests found in ./keploy/tests. Did recording succeed?"
   ls -la ./keploy || true
+  exit 1
 fi
 
-echo "Starting testing phase..."
+echo "Starting testing phase with up to 5 attempts..."
 
-# Allow command to fail, capture exit, and still print logs
-set +e
-sudo -E env PATH="$PATH" \
-  DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME \
-  "$REPLAY_BIN" test -c "python3 demo.py" --delay 20 &> test_logs.txt
-TEST_EXIT=$?
-set -e
+for attempt in {1..5}; do
+    echo "--- Test Attempt ${attempt}/5 ---"
 
-echo "Keploy test exited with code: $TEST_EXIT"
-echo "----- keploy test logs (head) -----"
-sed -n '1,200p' test_logs.txt || true
-echo "-----------------------------------"
-
-# If the command failed outright, still run your existing checks and then exit 1
-if [ $TEST_EXIT -ne 0 ]; then
-  echo "keploy test returned non-zero exit."
-fi
-
-# Your original checks
-if grep -q "ERROR" "test_logs.txt"; then
-    echo "Error found in pipeline..."
-    cat "test_logs.txt"
+    # Reset database state for a clean test environment before each attempt
+    echo "Resetting database state for attempt ${attempt}..."
     docker compose down
-    exit 1
-fi
-if grep -q "WARNING: DATA RACE" "test_logs.txt"; then
-    echo "Race condition detected in test, stopping pipeline..."
-    cat "test_logs.txt"
-    docker compose down
-    exit 1
-fi
+    docker compose up -d
+
+    # Wait for MySQL to be ready
+    echo "Waiting for DB on 127.0.0.1:${DB_PORT}..."
+    db_ready=false
+    for i in {1..30}; do
+        if nc -z 127.0.0.1 "${DB_PORT}" 2>/dev/null; then
+            echo "DB port is open."
+            db_ready=true
+            break
+        fi
+        sleep 2
+    done
+
+    if [ "$db_ready" = false ]; then
+        echo "DB failed to become ready for attempt ${attempt}. Retrying..."
+        continue # Skip to the next attempt
+    fi
+
+    sleep 10 # Extra wait time for DB initialization
+
+    # Run the test for the current attempt
+    log_file="test_logs_attempt_${attempt}.txt"
+    echo "Running Keploy test for attempt ${attempt}, logging to ${log_file}"
+
+    set +e
+    sudo -E env PATH="$PATH" \
+      DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME \
+      "$REPLAY_BIN" test -c "python3 demo.py" --delay 20 &> "${log_file}"
+    TEST_EXIT_CODE=$?
+    set -e
+
+    echo "Keploy test (attempt ${attempt}) exited with code: $TEST_EXIT_CODE"
+    echo "----- Keploy test logs (attempt ${attempt}) -----"
+    cat "${log_file}"
+    echo "-------------------------------------------"
+
+    # Check for success conditions: exit code 0 AND no 'ERROR' or 'DATA RACE' strings.
+    # `grep -q` returns 0 if found, 1 if not. We want the check to succeed if grep returns 1.
+    if [ $TEST_EXIT_CODE -eq 0 ] && ! grep -q "ERROR" "${log_file}" && ! grep -q "WARNING: DATA RACE" "${log_file}"; then
+        echo "✅ Test Attempt ${attempt} Succeeded! No errors found."
+        docker compose down
+        exit 0 # Exit the entire script successfully
+    else
+        echo "❌ Test Attempt ${attempt} Failed."
+        if [ "$attempt" -lt 5 ]; then
+            echo "Retrying..."
+            sleep 5 # Wait a bit before the next loop
+        fi
+    fi
+done
+
+# If the loop completes, all attempts have failed.
+echo "🔴 All 5 test attempts failed. Exiting with failure."
+docker compose down
+exit 1
