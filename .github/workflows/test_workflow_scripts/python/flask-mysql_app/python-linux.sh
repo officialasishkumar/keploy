@@ -80,7 +80,7 @@ send_request(){
     app_started=false
     echo "Checking for app readiness on port 5001..."
     while [ "$app_started" = false ]; do
-        # App runs on port 5001 as per demo.py
+        # App runs on port 5001 as per main.py
         if curl -s --head http://127.0.0.1:5001/ > /dev/null; then
             app_started=true
             echo "App is ready!"
@@ -127,7 +127,7 @@ for i in {1..2}; do
     app_name="flask-mysql-app-native-${i}"
     send_request &
     # Pass necessary environment variables to the recording session
-    sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $RECORD_BIN record -c "python3 demo.py" &> "${app_name}.txt"
+    sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $RECORD_BIN record -c "python3 main.py" &> "${app_name}.txt"
     
     if grep "ERROR" "${app_name}.txt"; then
         echo "Error found in recording..."
@@ -191,7 +191,7 @@ for attempt in {1..5}; do
     set +e
     sudo -E env PATH="$PATH" \
       DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME \
-      "$REPLAY_BIN" test -c "python3 demo.py" --delay 20 &> "${log_file}"
+      "$REPLAY_BIN" test -c "python3 main.py" --delay 20 &> "${log_file}"
     TEST_EXIT_CODE=$?
     set -e
 
