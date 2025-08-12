@@ -115,7 +115,7 @@ jobs:
           body: |
             The Keploy Python test has failed for the following configuration:
 
-            📋 **Test Details:**
+            📋 Test Details:
             - Job: ${{ matrix.app.name }} (${{ matrix.config.name }})
             - Repository: ${{ github.repository }}
             - PR Number: #${{ github.event.number }}
@@ -123,12 +123,12 @@ jobs:
             - Branch: ${{ github.head_ref }}
             - Author: ${{ github.actor }}
 
-            🔗 **Links:**
+            🔗 Links:
             - Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             - PR URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.number }}
             - Commit URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
 
-            📎 **Attached Files:**
+            📎 Attached Files:
             Please find the failure artifacts attached, including:
             - All log files from the test run
             - Keploy directory with test results and reports
