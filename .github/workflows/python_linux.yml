@@ -107,11 +107,11 @@ jobs:
         with:
           server_address: smtp.gmail.com
           server_port: 587
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: "Keploy Python Test Failure - ${{ matrix.app.name }} (${{ matrix.config.name }})"
           to: asish.kumar@keploy.io
-          from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
+          from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>
           body: |
             The Keploy Python test has failed for the following configuration:
 
