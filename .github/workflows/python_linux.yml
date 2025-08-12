@@ -14,10 +14,10 @@ jobs:
             script_dir: django_postgres
           - name: flask-mysql
             path: flask-mysql
-            script_dir: flask-mysql
+            script_dir: flask_mysql
           - name: flask-mysql-jwt
             path: flask-mysql_app
-            script_dir: flask-mysql_app
+            script_dir: flask_mysql_app
 
         config:
           - name: record_latest_replay_build
@@ -48,92 +48,89 @@ jobs:
       - name: Checkout the samples-python repository
         uses: actions/checkout@v4
         with:
-          repository: officialasishkumar/samples-python
+          repository: keploy/samples-python
           path: samples-python
 
+      # Create a directory to store logs and results for this specific job
+      - name: Create results directory
+        run: mkdir -p results
+
       - name: Run the ${{ matrix.app.name }} application
-        id: run_tests
         env:
           RECORD_BIN: ${{ steps.record.outputs.path }}
           REPLAY_BIN: ${{ steps.replay.outputs.path }}
         run: |
+          set -o pipefail # Make sure the script's exit code is propagated
           cd samples-python/${{ matrix.app.path }}
+          source $GITHUB_WORKSPACE/.github/workflows/test_workflow_scripts/python/${{ matrix.app.script_dir }}/python-linux.sh 2>&1 | tee $GITHUB_WORKSPACE/results/output.log
 
-          source $GITHUB_WORKSPACE/.github/workflows/test_workflow_scripts/python/${{ matrix.app.script_dir }}/python-linux.sh
-
-      - name: Collect and zip failure artifacts
-        if: failure()
+      # This step will always run, even if the previous step fails
+      - name: Archive test results
+        if: always()
         run: |
-          cd samples-python/${{ matrix.app.path }}
+          # Create a summary file with the job status
+          echo "Job: ${{ matrix.app.name }} (${{ matrix.config.name }})" > summary.txt
+          echo "Status: ${{ job.status }}" >> summary.txt
+          echo "See attached logs for details." >> summary.txt
 
-          # Create artifacts directory
-          mkdir -p failure_artifacts
+          # Move the summary into the results directory
+          mv summary.txt results/
 
-          # Copy all log files
-          find . -name "*.txt" -type f -exec cp {} failure_artifacts/ \; 2>/dev/null || true
-          find . -name "*.log" -type f -exec cp {} failure_artifacts/ \; 2>/dev/null || true
+          # Create a zip file for this job's results
+          zip -r results.zip results/
 
-          # Copy keploy directory if it exists
-          if [ -d "keploy" ]; then
-            cp -r keploy failure_artifacts/
-          fi
+      # Upload the zip file as an artifact
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.app.name }}-${{ matrix.config.name }}
+          path: results.zip
 
-          # Copy docker logs if available
-          docker compose logs > failure_artifacts/docker_logs.txt 2>/dev/null || true
+  send-summary-report:
+    # This job must wait for all matrix jobs to finish
+    needs: test-python-app
+    # `if: always()` ensures this job runs even if some of the tests failed
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # No name specified, so it downloads all artifacts from this workflow run
+          path: all-results
 
-          # Create a summary file with context
-          cat > failure_artifacts/failure_summary.txt << EOF
-          Job: ${{ matrix.app.name }} (${{ matrix.config.name }})
-          Repository: ${{ github.repository }}
-          PR Number: ${{ github.event.number }}
-          Commit SHA: ${{ github.sha }}
-          Commit Message: ${{ github.event.head_commit.message }}
-          Branch: ${{ github.head_ref }}
-          Author: ${{ github.actor }}
-          Workflow Run ID: ${{ github.run_id }}
-          Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          Timestamp: $(date -u)
-          EOF
+      - name: Prepare email content and attachments
+        id: prep-email
+        run: |
+          # Create a single summary file by combining all individual summaries
+          echo "## Test Run Summary" > summary_body.md
+          echo "" >> summary_body.md
+          echo "Workflow Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> summary_body.md
+          echo "" >> summary_body.md
 
-          # Create zip file
-          zip -r failure_artifacts_${{ matrix.app.name }}_${{ matrix.config.name }}.zip failure_artifacts/
+          # Find all summary files and concatenate them
+          find all-results -type f -name 'summary.txt' -exec cat {} + >> summary_body.md
 
-          echo "Created failure artifacts zip: failure_artifacts_${{ matrix.app.name }}_${{ matrix.config.name }}.zip"
-          ls -la failure_artifacts_${{ matrix.app.name }}_${{ matrix.config.name }}.zip
+          # Create a list of all result zip files to attach
+          # The mail action supports glob patterns, so we just need the directory
+          echo "attachment_path=all-results" >> $GITHUB_OUTPUT
 
-      - name: Send failure notification email
-        if: failure()
+      - name: Send summary email
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: "smtp.gmail.com"
-          server_port: 587
-          username: ${{ secrets.GMAIL_USERNAME }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          subject: "Keploy Python Test Failure - ${{ matrix.app.name }} (${{ matrix.config.name }})"
-          to: asish.kumar@keploy.io
-          from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>
-          body: |
-            The Keploy Python test has failed for the following configuration:
+          # SMTP server connection details
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
 
-            📋 Test Details:
-            - Job: ${{ matrix.app.name }} (${{ matrix.config.name }})
-            - Repository: ${{ github.repository }}
-            - PR Number: #${{ github.event.number }}
-            - Commit SHA: ${{ github.sha }}
-            - Branch: ${{ github.head_ref }}
-            - Author: ${{ github.actor }}
+          # Email details
+          subject: "Test Summary for ${{ github.repository }} - Run ${{ github.run_id }}"
+          body: file://summary_body.md
+          to: ${{ secrets.RECIPIENT_EMAILS }}
+          from: GitHub Actions <actions@github.com> # Or your preferred 'from' address
 
-            🔗 Links:
-            - Job URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            - PR URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.number }}
-            - Commit URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
-
-            📎 Attached Files:
-            Please find the failure artifacts attached, including:
-            - All log files from the test run
-            - Keploy directory with test results and reports
-            - Docker logs (if applicable)
-            - Failure summary with context
-
-            🕒 **Timestamp:** $(date -u)
-          attachments: samples-python/${{ matrix.app.path }}/failure_artifacts_${{ matrix.app.name }}_${{ matrix.config.name }}.zip
+          # Attach all the zip files from all the downloaded artifacts
+          attachments: ${{ steps.prep-email.outputs.attachment_path }}/*/*.zip
+          content_type: text/markdown
