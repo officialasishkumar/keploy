@@ -48,7 +48,7 @@ jobs:
       - name: Checkout the samples-python repository
         uses: actions/checkout@v4
         with:
-          repository: officialasishkumar/samples-python
+          repository: keploy/samples-python
           path: samples-python
 
       - name: Run the ${{ matrix.app.name }} application
