@@ -12,9 +12,9 @@ jobs:
           - name: django-postgres
             path: django-postgres/django_postgres
             script_dir: django_postgres
-          - name: flask-mysql
-            path: flask-mysql
-            script_dir: flask-mysql
+          # - name: flask-mysql
+          #   path: flask-mysql
+          #   script_dir: flask-mysql
           - name: flask-mysql-jwt
             path: flask-mysql_app
             script_dir: flask-mysql_app
@@ -68,10 +68,20 @@ jobs:
       - name: Archive test results
         if: always()
         run: |
-          # Create a summary file with the job status
-          echo "Job: ${{ matrix.app.name }} (${{ matrix.config.name }})" > summary.txt
+          # Create a detailed summary file with the job status
+          echo "Job: ${{ matrix.app.name }}" > summary.txt
+          echo "Configuration: Record from ${{ matrix.config.record_src }}, Replay from ${{ matrix.config.replay_src }}" >> summary.txt
           echo "Status: ${{ job.status }}" >> summary.txt
-          echo "See attached logs for details." >> summary.txt
+          echo "Timestamp: $(date)" >> summary.txt
+          echo "" >> summary.txt
+
+          # Add log excerpt if job failed
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "=== FAILURE DETAILS ===" >> summary.txt
+            echo "Last 50 lines of output:" >> summary.txt
+            echo "" >> summary.txt
+            tail -50 results/output.log >> summary.txt 2>/dev/null || echo "No output log available" >> summary.txt
+          fi
 
           # Move the summary into the results directory
           mv summary.txt results/
@@ -84,7 +94,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.app.name }}-${{ matrix.config.name }}
+          name: test-results-${{ matrix.app.name }}-record-${{ matrix.config.record_src }}-replay-${{ matrix.config.replay_src }}
           path: results.zip
 
   send-summary-report:
@@ -102,35 +112,84 @@ jobs:
       - name: Prepare email content and attachments
         id: prep-email
         run: |
-          # Create a single summary file by combining all individual summaries
-          echo "## Test Run Summary" > summary_body.md
+          # Initialize variables
+          failed_jobs_count=0
+          total_jobs_count=0
+          failed_details=""
+
+          # Create a comprehensive summary file
+          echo "# Python Linux Tests - Failure Report" > summary_body.md
           echo "" >> summary_body.md
-          echo "Workflow Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> summary_body.md
+          echo "**Workflow Run:** [#${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> summary_body.md
+          echo "**Repository:** ${{ github.repository }}" >> summary_body.md
+          echo "**Branch:** ${{ github.ref_name }}" >> summary_body.md
+          echo "**Commit:** ${{ github.sha }}" >> summary_body.md
+          echo "**Timestamp:** $(date)" >> summary_body.md
           echo "" >> summary_body.md
 
-          # Add a table header for clarity
-          echo "| Job | Status |" >> summary_body.md
-          echo "|---|---|" >> summary_body.md
-
-          # Find all summary files and format them for the markdown table
-          # This is a bit more robust than just cat-ing the files
+          # Count total jobs and failed jobs, collect failure details
           for file in $(find all-results -type f -name 'summary.txt'); do
+            total_jobs_count=$((total_jobs_count + 1))
             JOB_NAME=$(grep "Job:" "$file" | sed 's/Job: //')
+            JOB_CONFIG=$(grep "Configuration:" "$file" | sed 's/Configuration: //')
             JOB_STATUS=$(grep "Status:" "$file" | sed 's/Status: //')
-            # Add a check for status to add an emoji
-            if [ "$JOB_STATUS" = "success" ]; then
-              STATUS_ICON="✅"
-            else
-              STATUS_ICON="❌"
+            
+            if [ "$JOB_STATUS" != "success" ]; then
+              failed_jobs_count=$((failed_jobs_count + 1))
+              failed_details="${failed_details}## ❌ Failed: ${JOB_NAME}\n"
+              failed_details="${failed_details}**Configuration:** ${JOB_CONFIG}\n"
+              failed_details="${failed_details}**Status:** ${JOB_STATUS}\n\n"
+              
+              # Add failure details if available
+              if grep -q "=== FAILURE DETAILS ===" "$file"; then
+                failed_details="${failed_details}### Error Logs:\n"
+                failed_details="${failed_details}\`\`\`\n"
+                # Extract failure details from the summary file
+                awk '/=== FAILURE DETAILS ===/,EOF' "$file" | tail -n +3 | while read line; do
+                  failed_details="${failed_details}${line}\n"
+                done
+                failed_details="${failed_details}\`\`\`\n\n"
+              fi
+              failed_details="${failed_details}---\n\n"
             fi
-            echo "| ${JOB_NAME} | ${JOB_STATUS} ${STATUS_ICON} |" >> summary_body.md
           done
 
-          # Create a list of all result zip files to attach
-          # The mail action supports glob patterns, so we just need the directory
-          echo "attachment_path=all-results/*/*.zip" >> $GITHUB_OUTPUT
+          # Add overall summary
+          if [ $failed_jobs_count -eq 0 ]; then
+            echo "## ✅ All Tests Passed!" >> summary_body.md
+            echo "" >> summary_body.md
+            echo "All $total_jobs_count test configurations completed successfully." >> summary_body.md
+            echo "attachment_path=" >> $GITHUB_OUTPUT  # No attachments for successful runs
+          else
+            echo "## ⚠️ Test Failures Detected" >> summary_body.md
+            echo "" >> summary_body.md
+            echo "**Summary:** $failed_jobs_count out of $total_jobs_count test configurations failed." >> summary_body.md
+            echo "" >> summary_body.md
+            echo "### Failed Test Details:" >> summary_body.md
+            echo "" >> summary_body.md
+            
+            # Add the collected failure details
+            echo -e "$failed_details" >> summary_body.md
+            
+            # Only attach failed job artifacts
+            failed_attachments=""
+            for file in $(find all-results -type f -name 'summary.txt'); do
+              JOB_STATUS=$(grep "Status:" "$file" | sed 's/Status: //')
+              if [ "$JOB_STATUS" != "success" ]; then
+                dir_name=$(dirname "$file")
+                zip_file=$(find "$dir_name" -name "*.zip" | head -1)
+                if [ -n "$zip_file" ]; then
+                  failed_attachments="${failed_attachments}${zip_file} "
+                fi
+              fi
+            done
+            
+            echo "attachment_path=${failed_attachments}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Send summary email
+        # Only send email if there are failures or if attachment_path is not empty
+        if: steps.prep-email.outputs.attachment_path != ''
         uses: dawidd6/action-send-mail@v3
         with:
           # SMTP server connection details (ensure these secrets exist)
@@ -140,11 +199,9 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
 
           # Email details
-          subject: "Test Summary for ${{ github.repository }} - Run ${{ github.run_id }}"
+          subject: "🚨 Python Linux Tests Failed - ${{ github.repository }} (Run #${{ github.run_id }})"
           body: file://summary_body.md
           to: ${{ secrets.RECIPIENT_EMAILS }}
           from: ${{ secrets.GMAIL_USERNAME }}
-
-          convert_markdown: true
 
           attachments: ${{ steps.prep-email.outputs.attachment_path }}
