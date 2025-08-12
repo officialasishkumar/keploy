@@ -142,8 +142,8 @@ jobs:
           # Email details
           subject: "Test Summary for ${{ github.repository }} - Run ${{ github.run_id }}"
           body: file://summary_body.md
-          to: ${{ secrets.RECIPIENT_EMAILS }} # This secret should contain "sarthak@keploy.io,asish.kumar@keploy.io"
-          from: GitHub Actions <actions@github.com> # Or your preferred 'from' address
+          to: ${{ secrets.RECIPIENT_EMAILS }}
+          from: ${{ secrets.SMTP_USERNAME }}
 
           convert_markdown: true
 
