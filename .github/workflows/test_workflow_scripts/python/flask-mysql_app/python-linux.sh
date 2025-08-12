@@ -128,13 +128,6 @@ send_request(){
     echo "Getting migrations..."
     curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/system/migrations'
 
-    # API log creation
-    echo "Creating API log..."
-    curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-        -d '{"event": "test_log", "details": "This is a test log entry"}' \
-        'http://127.0.0.1:5000/logs'
-
-
     # Search clients
     echo "Searching clients..."
     curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/search/clients?q=Global'
