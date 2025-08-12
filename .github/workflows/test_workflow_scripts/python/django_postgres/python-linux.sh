@@ -2,17 +2,6 @@
 
 source ../../.github/workflows/test_workflow_scripts/test-iid.sh
 
-echo "Generating Keploy configuration file..."
-sudo $RECORD_BIN config --generate -p .
-config_file="./keploy.yml"
-if [ -f "$config_file" ]; then
-    sed -i 's/global: {}/global: {"header": {"Allow":[],}}/' "$config_file"
-    echo "Configuration file generated and modified successfully."
-else
-    echo "Error: Keploy config file was not generated."
-    exit 1
-fi
-
 # Checkout to the specified branch
 git fetch origin
 git checkout native-linux
@@ -29,6 +18,13 @@ export PYTHON_PATH=./venv/lib/python3.10/site-packages/django
 # Database migrations
 python3 manage.py makemigrations
 python3 manage.py migrate
+
+# Configuration and cleanup
+sudo $RECORD_BIN config --generate
+sudo rm -rf keploy/  # Clean old test data
+config_file="./keploy.yml"
+sed -i 's/global: {}/global: {"header": {"Allow":[],}}/' "$config_file"
+sleep 5
 
 send_request(){
     sleep 10
