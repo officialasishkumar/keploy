@@ -48,7 +48,7 @@ jobs:
       - name: Checkout the samples-python repository
         uses: actions/checkout@v4
         with:
-          repository: keploy/samples-python
+          repository: officialasishkumar/samples-python
           path: samples-python
 
       # Create a directory to store logs and results for this specific job
