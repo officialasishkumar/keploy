@@ -189,7 +189,7 @@ for i in {1..2}; do
     app_name="flask-mysql-app-native-${i}"
     send_request &
     # Pass necessary environment variables to the recording session
-    sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $RECORD_BIN record -c "python3 main.py" &> "${app_name}.txt" || true    
+    sudo -E env PATH="$PATH" DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER DB_PASSWORD=$DB_PASSWORD DB_NAME=$DB_NAME $RECORD_BIN record -c "python3 main.py" &> "${app_name}.txt" || true
     if grep "ERROR" "${app_name}.txt"; then
         echo "Error found in recording..."
         cat "${app_name}.txt"
