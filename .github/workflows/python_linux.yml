@@ -60,7 +60,22 @@ jobs:
           cd samples-python/${{ matrix.app.path }}
           source $GITHUB_WORKSPACE/.github/workflows/test_workflow_scripts/python/${{ matrix.app.script_dir }}/python-linux.sh 2>&1 | tee $GITHUB_WORKSPACE/results/output.log
 
-      - name: Prepare test results
+      - name: Gather all logs and reports
+        if: always()
+        run: |
+          APP_DIR="samples-python/${{ matrix.app.path }}"
+          RESULTS_DIR="$GITHUB_WORKSPACE/results"
+
+          # Copy the entire keploy directory if it exists
+          if [ -d "$APP_DIR/keploy" ]; then
+            cp -r "$APP_DIR/keploy" "$RESULTS_DIR/"
+          fi
+
+          # Copy all .txt log files from the application directory
+          # The || true prevents the step from failing if no .txt files are found
+          cp $APP_DIR/*.txt "$RESULTS_DIR/" || true
+
+      - name: Prepare test results summary
         if: always()
         run: |
           echo "Job: ${{ matrix.app.name }}" > results/summary.txt
@@ -101,7 +116,7 @@ jobs:
 
           failed_count=0
           total_count=0
-          failed_zips=() # Use an array to store zip file paths
+          failed_zips=()
 
           for summary_file in $(find all-results -type f -name 'summary.txt'); do
             total_count=$((total_count + 1))
@@ -119,7 +134,7 @@ jobs:
               artifact_dir=$(dirname "$summary_file")
               zip_name="failed-${JOB_NAME}-${JOB_CONFIG}.zip"
               zip -r "$zip_name" "$artifact_dir"
-              failed_zips+=("$zip_name") # Add zip name to the array
+              failed_zips+=("$zip_name")
             fi
             printf "%-20s | %-30s | %s\n" "$JOB_NAME" "$JOB_CONFIG" "$STATUS_ICON" >> $BODY_FILE
           done
@@ -129,7 +144,6 @@ jobs:
           passed_count=$((total_count - failed_count))
           echo "Total Tests: $total_count | Failed: $failed_count | Passed: $passed_count" >> $BODY_FILE
 
-          # Join the array with commas to create a valid attachments string
           attachment_paths=$(IFS=,; echo "${failed_zips[*]}")
           echo "attachment_path=${attachment_paths}" >> $GITHUB_OUTPUT
 
