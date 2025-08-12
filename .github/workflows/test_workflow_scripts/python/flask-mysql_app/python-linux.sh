@@ -135,10 +135,6 @@ send_request(){
         'http://127.0.0.1:5000/logs'
 
 
-    # Full financial summary
-    echo "Getting full financial summary..."
-    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/reports/full-financial-summary'
-
     # Search clients
     echo "Searching clients..."
     curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/search/clients?q=Global'
