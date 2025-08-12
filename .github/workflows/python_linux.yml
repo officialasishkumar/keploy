@@ -14,10 +14,10 @@ jobs:
             script_dir: django_postgres
           - name: flask-mysql
             path: flask-mysql
-            script_dir: flask_mysql
+            script_dir: flask-mysql
           - name: flask-mysql-jwt
             path: flask-mysql_app
-            script_dir: flask_mysql_app
+            script_dir: flask-mysql_app
 
         config:
           - name: record_latest_replay_build
@@ -97,7 +97,6 @@ jobs:
       - name: Download all test artifacts
         uses: actions/download-artifact@v4
         with:
-          # No name specified, so it downloads all artifacts from this workflow run
           path: all-results
 
       - name: Prepare email content and attachments
