@@ -134,9 +134,6 @@ send_request(){
         -d '{"event": "test_log", "details": "This is a test log entry"}' \
         'http://127.0.0.1:5000/logs'
 
-    # Client summary report
-    echo "Getting client summary report..."
-    curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/reports/client-summary'
 
     # Full financial summary
     echo "Getting full financial summary..."
