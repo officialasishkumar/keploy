@@ -47,7 +47,8 @@ jobs:
         with:
           repository: officialasishkumar/samples-python
           path: samples-python
-
+      
+      # This directory is only for the main output.log, not the final artifact.
       - name: Create results directory
         run: mkdir -p results
 
@@ -60,34 +61,43 @@ jobs:
           cd samples-python/${{ matrix.app.path }}
           source $GITHUB_WORKSPACE/.github/workflows/test_workflow_scripts/python/${{ matrix.app.script_dir }}/python-linux.sh 2>&1 | tee $GITHUB_WORKSPACE/results/output.log
 
-      - name: Gather all logs and reports
+      - name: Create final zip artifact
         if: always()
         run: |
           APP_DIR="samples-python/${{ matrix.app.path }}"
-          RESULTS_DIR="$GITHUB_WORKSPACE/results"
+          STAGING_DIR="$GITHUB_WORKSPACE/staging"
+          ZIP_NAME="results-${{ matrix.app.name }}-${{ matrix.config.name }}.zip"
 
-          # Copy the entire keploy directory if it exists
+          mkdir -p $STAGING_DIR
+
+          # Copy keploy directory if it exists
           if [ -d "$APP_DIR/keploy" ]; then
-            cp -r "$APP_DIR/keploy" "$RESULTS_DIR/"
+            cp -r "$APP_DIR/keploy" "$STAGING_DIR/"
           fi
 
-          # Copy all .txt log files from the application directory
-          # The || true prevents the step from failing if no .txt files are found
-          cp $APP_DIR/*.txt "$RESULTS_DIR/" || true
+          # Copy all .txt log files from the app directory
+          find "$APP_DIR" -maxdepth 1 -type f -name "*.txt" -exec cp {} "$STAGING_DIR/" \;
 
-      - name: Prepare test results summary
-        if: always()
-        run: |
-          echo "Job: ${{ matrix.app.name }}" > results/summary.txt
-          echo "Config: ${{ matrix.config.name }}" >> results/summary.txt
-          echo "Status: ${{ job.status }}" >> results/summary.txt
+          # Copy main output log
+          if [ -f "$GITHUB_WORKSPACE/results/output.log" ]; then
+            cp "$GITHUB_WORKSPACE/results/output.log" "$STAGING_DIR/"
+          fi
+          
+          # Create summary file inside the staging area
+          echo "Job: ${{ matrix.app.name }}" > $STAGING_DIR/summary.txt
+          echo "Config: ${{ matrix.config.name }}" >> $STAGING_DIR/summary.txt
+          echo "Status: ${{ job.status }}" >> $STAGING_DIR/summary.txt
+
+          # Create the zip from the staging directory's contents
+          cd $STAGING_DIR
+          zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" .
 
       - name: Upload results artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: results-${{ matrix.app.name }}-${{ matrix.config.name }}
-          path: results/
+          path: results-${{ matrix.app.name }}-${{ matrix.config.name }}.zip
 
   send-summary-report:
     needs: test-python-app
@@ -118,12 +128,15 @@ jobs:
           total_count=0
           failed_zips=()
 
-          for summary_file in $(find all-results -type f -name 'summary.txt'); do
+          # Process all downloaded zip files
+          for zip_file in $(find all-results -type f -name '*.zip'); do
             total_count=$((total_count + 1))
             
-            JOB_NAME=$(grep "Job:" "$summary_file" | sed 's/Job: //')
-            JOB_CONFIG=$(grep "Config:" "$summary_file" | sed 's/Config: //')
-            JOB_STATUS=$(grep "Status:" "$summary_file" | sed 's/Status: //')
+            # Extract summary.txt content from the zip to a variable
+            SUMMARY_CONTENT=$(unzip -p "$zip_file" summary.txt)
+            JOB_NAME=$(echo "$SUMMARY_CONTENT" | grep "Job:" | sed 's/Job: //')
+            JOB_CONFIG=$(echo "$SUMMARY_CONTENT" | grep "Config:" | sed 's/Config: //')
+            JOB_STATUS=$(echo "$SUMMARY_CONTENT" | grep "Status:" | sed 's/Status: //')
             
             if [ "$JOB_STATUS" = "success" ]; then
               STATUS_ICON="✅ Success"
@@ -131,14 +144,14 @@ jobs:
               STATUS_ICON="❌ Failed"
               failed_count=$((failed_count + 1))
               
-              artifact_dir=$(dirname "$summary_file")
-              zip_name="failed-${JOB_NAME}-${JOB_CONFIG}.zip"
-              zip -r "$zip_name" "$artifact_dir"
-              failed_zips+=("$zip_name")
+              # Rename the zip for failure and add it to the list of attachments
+              new_zip_name="failed-${JOB_NAME}-${JOB_CONFIG}.zip"
+              mv "$zip_file" "$new_zip_name"
+              failed_zips+=("$new_zip_name")
             fi
             printf "%-20s | %-30s | %s\n" "$JOB_NAME" "$JOB_CONFIG" "$STATUS_ICON" >> $BODY_FILE
           done
-
+          
           echo "----------------------------------------------------" >> $BODY_FILE
           echo "" >> $BODY_FILE
           passed_count=$((total_count - failed_count))
