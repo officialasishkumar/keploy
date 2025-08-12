@@ -3,7 +3,6 @@ on:
   workflow_call:
 
 jobs:
-
   test-python-app:
     runs-on: ubuntu-latest
     strategy:
@@ -64,17 +63,16 @@ jobs:
       - name: Prepare test results
         if: always()
         run: |
-          echo "Job: ${{ matrix.app.name }} (${{ matrix.config.name }})" > results/summary.txt
+          echo "Job: ${{ matrix.app.name }}" > results/summary.txt
+          echo "Config: ${{ matrix.config.name }}" >> results/summary.txt
           echo "Status: ${{ job.status }}" >> results/summary.txt
-          echo "See attached logs for details." >> results/summary.txt
 
       - name: Upload results artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.app.name }}-${{ matrix.config.name }}
+          name: results-${{ matrix.app.name }}-${{ matrix.config.name }}
           path: results/
-
 
   send-summary-report:
     needs: test-python-app
@@ -89,29 +87,30 @@ jobs:
       - name: Prepare email content and attachments
         id: prep-email
         run: |
-          # Create a comprehensive summary file
-          echo "# Python Linux Tests Report" > summary_body.md
-          echo "" >> summary_body.md
-          echo "**Workflow Run:** [#${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> summary_body.md
-          echo "**Repository:** ${{ github.repository }}" >> summary_body.md
-          echo "**Branch:** ${{ github.ref_name }}" >> summary_body.md
-          echo "**Timestamp:** $(date)" >> summary_body.md
-          echo "" >> summary_body.md
+          # Create email body file
+          BODY_FILE="summary_body.txt"
+
+          # Add Header
+          echo "Python Linux Tests Report" > $BODY_FILE
+          echo "" >> $BODY_FILE
+          echo "Workflow Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $BODY_FILE
+          echo "Repository: ${{ github.repository }}" >> $BODY_FILE
+          echo "Branch: ${{ github.ref_name }}" >> $BODY_FILE
+          echo "Timestamp: $(date)" >> $BODY_FILE
+          echo "" >> $BODY_FILE
+          echo "Summary" >> $BODY_FILE
+          echo "----------------------------------------------------" >> $BODY_FILE
 
           failed_count=0
           total_count=0
           attachment_paths=""
 
-          echo "## Summary" >> summary_body.md
-          echo "| Project | Configuration | Status |" >> summary_body.md
-          echo "|---|---|---|" >> summary_body.md
-
-          # Process all summary files from downloaded artifacts
+          # Process all summary files
           for summary_file in $(find all-results -type f -name 'summary.txt'); do
             total_count=$((total_count + 1))
             
-            JOB_NAME=$(grep "Job:" "$summary_file" | sed 's/Job: //' | sed 's/ (.*//')
-            JOB_CONFIG=$(grep "Job:" "$summary_file" | sed 's/.*(//' | sed 's/).*//')
+            JOB_NAME=$(grep "Job:" "$summary_file" | sed 's/Job: //')
+            JOB_CONFIG=$(grep "Config:" "$summary_file" | sed 's/Config: //')
             JOB_STATUS=$(grep "Status:" "$summary_file" | sed 's/Status: //')
             
             if [ "$JOB_STATUS" = "success" ]; then
@@ -119,47 +118,21 @@ jobs:
             else
               STATUS_ICON="❌ Failed"
               failed_count=$((failed_count + 1))
-              # For failed jobs, zip the artifact directory and add it to attachments
+              
+              # For failed jobs, zip the artifact directory with a descriptive name
               artifact_dir=$(dirname "$summary_file")
-              zip_name="${artifact_dir}.zip"
+              zip_name="failed-${JOB_NAME}-${JOB_CONFIG}.zip"
               zip -r "$zip_name" "$artifact_dir"
               attachment_paths="${attachment_paths} ${zip_name}"
             fi
-            echo "| ${JOB_NAME} | ${JOB_CONFIG} | ${STATUS_ICON} |" >> summary_body.md
+            # Append plain text summary line
+            printf "%-20s | %-30s | %s\n" "$JOB_NAME" "$JOB_CONFIG" "$STATUS_ICON" >> $BODY_FILE
           done
 
-          echo "" >> summary_body.md
-          echo "**Total Tests:** $total_count | **Failed:** $failed_count | **Passed:** $((total_count - failed_count))" >> summary_body.md
-
-          if [ $failed_count -gt 0 ]; then
-            echo "" >> summary_body.md
-            echo "## 🚨 Failure Details" >> summary_body.md
-            echo "" >> summary_body.md
-            
-            for summary_file in $(find all-results -type f -name 'summary.txt'); do
-              JOB_STATUS=$(grep "Status:" "$summary_file" | sed 's/Status: //')
-              
-              if [ "$JOB_STATUS" != "success" ]; then
-                JOB_NAME=$(grep "Job:" "$summary_file" | sed 's/Job: //' | sed 's/ (.*//')
-                JOB_CONFIG=$(grep "Job:" "$summary_file" | sed 's/.*(//' | sed 's/).*//')
-                
-                echo "### ❌ ${JOB_NAME} (${JOB_CONFIG})" >> summary_body.md
-                echo "**Status:** ${JOB_STATUS}" >> summary_body.md
-                echo "" >> summary_body.md
-                
-                log_file=$(dirname "$summary_file")/output.log
-                if [ -f "$log_file" ]; then
-                  echo "**Last 30 lines of logs:**" >> summary_body.md
-                  echo "\`\`\`" >> summary_body.md
-                  tail -30 "$log_file" >> summary_body.md
-                  echo "\`\`\`" >> summary_body.md
-                fi
-                echo "" >> summary_body.md
-                echo "---" >> summary_body.md
-                echo "" >> summary_body.md
-              fi
-            done
-          fi
+          echo "----------------------------------------------------" >> $BODY_FILE
+          echo "" >> $BODY_FILE
+          passed_count=$((total_count - failed_count))
+          echo "Total Tests: $total_count | Failed: $failed_count | Passed: $passed_count" >> $BODY_FILE
 
           # Set outputs for the next step
           echo "attachment_path=$(echo $attachment_paths | xargs)" >> $GITHUB_OUTPUT
@@ -178,10 +151,7 @@ jobs:
           username: ${{ secrets.GMAIL_USERNAME }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: ${{ steps.prep-email.outputs.email_subject }}
-          body: file://summary_body.md
+          body: file://summary_body.txt
           to: ${{ secrets.RECIPIENT_EMAILS }}
           from: ${{ secrets.GMAIL_USERNAME }}
-          # This ensures the email client renders the Markdown as HTML
-          content_type: text/html
-          # This now attaches only the zips of failed jobs
           attachments: ${{ steps.prep-email.outputs.attachment_path }}
