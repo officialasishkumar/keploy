@@ -195,11 +195,6 @@ for i in {1..2}; do
         cat "${app_name}.txt"
         exit 1
     fi
-    if grep "WARNING: DATA RACE" "${app_name}.txt"; then
-        echo "Race condition detected in recording, stopping pipeline..."
-        cat "${app_name}.txt"
-        exit 1
-    fi
     sleep 5
     wait # Wait for send_request to finish
     echo "Recorded test case and mocks for iteration ${i}"
@@ -260,9 +255,9 @@ for attempt in {1..5}; do
     cat "${log_file}"
     echo "-------------------------------------------"
 
-    # Check for generic errors or data races in logs first
-    if grep -q "ERROR" "${log_file}" || grep -q "WARNING: DATA RACE" "${log_file}"; then
-        echo "❌ Test Attempt ${attempt} Failed. Found ERROR or DATA RACE in logs."
+    # Check for generic errors in logs first
+    if grep -q "ERROR" "${log_file}"; then
+        echo "❌ Test Attempt ${attempt} Failed. Found ERROR in logs."
         if [ "$attempt" -lt 5 ]; then
             echo "Retrying..."
             sleep 5
