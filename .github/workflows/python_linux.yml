@@ -3,6 +3,7 @@ on:
   workflow_call:
 
 jobs:
+
   test-python-app:
     runs-on: ubuntu-latest
     strategy:
@@ -48,7 +49,6 @@ jobs:
           repository: officialasishkumar/samples-python
           path: samples-python
 
-      # Create a directory to store logs and results for this specific job
       - name: Create results directory
         run: mkdir -p results
 
@@ -57,37 +57,27 @@ jobs:
           RECORD_BIN: ${{ steps.record.outputs.path }}
           REPLAY_BIN: ${{ steps.replay.outputs.path }}
         run: |
-          set -o pipefail # Make sure the script's exit code is propagated
+          set -o pipefail
           cd samples-python/${{ matrix.app.path }}
           source $GITHUB_WORKSPACE/.github/workflows/test_workflow_scripts/python/${{ matrix.app.script_dir }}/python-linux.sh 2>&1 | tee $GITHUB_WORKSPACE/results/output.log
 
-      # This step will always run, even if the previous step fails
-      - name: Archive test results
+      - name: Prepare test results
         if: always()
         run: |
-          # Create a summary file with the job status
-          echo "Job: ${{ matrix.app.name }} (${{ matrix.config.name }})" > summary.txt
-          echo "Status: ${{ job.status }}" >> summary.txt
-          echo "See attached logs for details." >> summary.txt
+          echo "Job: ${{ matrix.app.name }} (${{ matrix.config.name }})" > results/summary.txt
+          echo "Status: ${{ job.status }}" >> results/summary.txt
+          echo "See attached logs for details." >> results/summary.txt
 
-          # Move the summary into the results directory
-          mv summary.txt results/
-
-          # Create a zip file for this job's results
-          zip -r results.zip results/
-
-      # Upload the zip file as an artifact
       - name: Upload results artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.app.name }}-record-${{ matrix.config.record_src }}-replay-${{ matrix.config.replay_src }}
-          path: results.zip
+          name: test-results-${{ matrix.app.name }}-${{ matrix.config.name }}
+          path: results/
+
 
   send-summary-report:
-    # This job must wait for all matrix jobs to finish
     needs: test-python-app
-    # `if: always()` ensures this job runs even if some of the tests failed
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -108,27 +98,32 @@ jobs:
           echo "**Timestamp:** $(date)" >> summary_body.md
           echo "" >> summary_body.md
 
-          # Count failures and collect details
           failed_count=0
           total_count=0
+          attachment_paths=""
 
-          # Add summary table
           echo "## Summary" >> summary_body.md
           echo "| Project | Configuration | Status |" >> summary_body.md
           echo "|---|---|---|" >> summary_body.md
 
-          # Process all summary files
-          for file in $(find all-results -type f -name 'summary.txt'); do
+          # Process all summary files from downloaded artifacts
+          for summary_file in $(find all-results -type f -name 'summary.txt'); do
             total_count=$((total_count + 1))
-            JOB_NAME=$(grep "Job:" "$file" | sed 's/Job: //' | sed 's/ (.*//')
-            JOB_CONFIG=$(grep "Job:" "$file" | sed 's/.*(//' | sed 's/).*//')
-            JOB_STATUS=$(grep "Status:" "$file" | sed 's/Status: //')
+            
+            JOB_NAME=$(grep "Job:" "$summary_file" | sed 's/Job: //' | sed 's/ (.*//')
+            JOB_CONFIG=$(grep "Job:" "$summary_file" | sed 's/.*(//' | sed 's/).*//')
+            JOB_STATUS=$(grep "Status:" "$summary_file" | sed 's/Status: //')
             
             if [ "$JOB_STATUS" = "success" ]; then
               STATUS_ICON="✅ Success"
             else
               STATUS_ICON="❌ Failed"
               failed_count=$((failed_count + 1))
+              # For failed jobs, zip the artifact directory and add it to attachments
+              artifact_dir=$(dirname "$summary_file")
+              zip_name="${artifact_dir}.zip"
+              zip -r "$zip_name" "$artifact_dir"
+              attachment_paths="${attachment_paths} ${zip_name}"
             fi
             echo "| ${JOB_NAME} | ${JOB_CONFIG} | ${STATUS_ICON} |" >> summary_body.md
           done
@@ -136,26 +131,24 @@ jobs:
           echo "" >> summary_body.md
           echo "**Total Tests:** $total_count | **Failed:** $failed_count | **Passed:** $((total_count - failed_count))" >> summary_body.md
 
-          # Add failure details if any
           if [ $failed_count -gt 0 ]; then
             echo "" >> summary_body.md
             echo "## 🚨 Failure Details" >> summary_body.md
             echo "" >> summary_body.md
             
-            for file in $(find all-results -type f -name 'summary.txt'); do
-              JOB_NAME=$(grep "Job:" "$file" | sed 's/Job: //' | sed 's/ (.*//')
-              JOB_CONFIG=$(grep "Job:" "$file" | sed 's/.*(//' | sed 's/).*//')
-              JOB_STATUS=$(grep "Status:" "$file" | sed 's/Status: //')
+            for summary_file in $(find all-results -type f -name 'summary.txt'); do
+              JOB_STATUS=$(grep "Status:" "$summary_file" | sed 's/Status: //')
               
               if [ "$JOB_STATUS" != "success" ]; then
+                JOB_NAME=$(grep "Job:" "$summary_file" | sed 's/Job: //' | sed 's/ (.*//')
+                JOB_CONFIG=$(grep "Job:" "$summary_file" | sed 's/.*(//' | sed 's/).*//')
+                
                 echo "### ❌ ${JOB_NAME} (${JOB_CONFIG})" >> summary_body.md
                 echo "**Status:** ${JOB_STATUS}" >> summary_body.md
                 echo "" >> summary_body.md
                 
-                # Try to get some log info from the directory
-                dir_name=$(dirname "$file")
-                log_file=$(find "$dir_name" -name "output.log" | head -1)
-                if [ -n "$log_file" ] && [ -f "$log_file" ]; then
+                log_file=$(dirname "$summary_file")/output.log
+                if [ -f "$log_file" ]; then
                   echo "**Last 30 lines of logs:**" >> summary_body.md
                   echo "\`\`\`" >> summary_body.md
                   tail -30 "$log_file" >> summary_body.md
@@ -168,10 +161,9 @@ jobs:
             done
           fi
 
-          # Always attach all zip files
-          echo "attachment_path=all-results/*/*.zip" >> $GITHUB_OUTPUT
+          # Set outputs for the next step
+          echo "attachment_path=$(echo $attachment_paths | xargs)" >> $GITHUB_OUTPUT
 
-          # Set email subject based on results
           if [ $failed_count -gt 0 ]; then
             echo "email_subject=🚨 Python Tests FAILED ($failed_count/$total_count) - ${{ github.repository }} #${{ github.run_id }}" >> $GITHUB_OUTPUT
           else
@@ -181,16 +173,15 @@ jobs:
       - name: Send summary email
         uses: dawidd6/action-send-mail@v3
         with:
-          # SMTP server connection details (ensure these secrets exist)
           server_address: "smtp.gmail.com"
           server_port: "587"
           username: ${{ secrets.GMAIL_USERNAME }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
-
-          # Email details
           subject: ${{ steps.prep-email.outputs.email_subject }}
           body: file://summary_body.md
           to: ${{ secrets.RECIPIENT_EMAILS }}
           from: ${{ secrets.GMAIL_USERNAME }}
-
+          # This ensures the email client renders the Markdown as HTML
+          content_type: text/html
+          # This now attaches only the zips of failed jobs
           attachments: ${{ steps.prep-email.outputs.attachment_path }}
