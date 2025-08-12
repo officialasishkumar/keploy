@@ -108,17 +108,32 @@ jobs:
           echo "Workflow Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> summary_body.md
           echo "" >> summary_body.md
 
-          # Find all summary files and concatenate them
-          find all-results -type f -name 'summary.txt' -exec cat {} + >> summary_body.md
+          # Add a table header for clarity
+          echo "| Job | Status |" >> summary_body.md
+          echo "|---|---|" >> summary_body.md
+
+          # Find all summary files and format them for the markdown table
+          # This is a bit more robust than just cat-ing the files
+          for file in $(find all-results -type f -name 'summary.txt'); do
+            JOB_NAME=$(grep "Job:" "$file" | sed 's/Job: //')
+            JOB_STATUS=$(grep "Status:" "$file" | sed 's/Status: //')
+            # Add a check for status to add an emoji
+            if [ "$JOB_STATUS" = "success" ]; then
+              STATUS_ICON="✅"
+            else
+              STATUS_ICON="❌"
+            fi
+            echo "| ${JOB_NAME} | ${JOB_STATUS} ${STATUS_ICON} |" >> summary_body.md
+          done
 
           # Create a list of all result zip files to attach
           # The mail action supports glob patterns, so we just need the directory
-          echo "attachment_path=all-results" >> $GITHUB_OUTPUT
+          echo "attachment_path=all-results/*/*.zip" >> $GITHUB_OUTPUT
 
       - name: Send summary email
         uses: dawidd6/action-send-mail@v3
         with:
-          # SMTP server connection details
+          # SMTP server connection details (ensure these secrets exist)
           server_address: ${{ secrets.SMTP_HOST }}
           server_port: ${{ secrets.SMTP_PORT }}
           username: ${{ secrets.SMTP_USERNAME }}
@@ -127,9 +142,9 @@ jobs:
           # Email details
           subject: "Test Summary for ${{ github.repository }} - Run ${{ github.run_id }}"
           body: file://summary_body.md
-          to: ${{ secrets.RECIPIENT_EMAILS }}
+          to: ${{ secrets.RECIPIENT_EMAILS }} # This secret should contain "sarthak@keploy.io,asish.kumar@keploy.io"
           from: GitHub Actions <actions@github.com> # Or your preferred 'from' address
 
-          # Attach all the zip files from all the downloaded artifacts
-          attachments: ${{ steps.prep-email.outputs.attachment_path }}/*/*.zip
-          content_type: text/markdown
+          convert_markdown: true
+
+          attachments: ${{ steps.prep-email.outputs.attachment_path }}
