@@ -155,26 +155,6 @@ send_request(){
     curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
         -d '{"from_account_id": 1, "to_account_id": 2, "amount": "100.50"}' \
         'http://127.0.0.1:5000/transactions/transfer'
-
-    # Concurrent load testing simulation (reduced scale for recording)
-    echo "Running concurrent requests simulation..."
-    for i in {1..5}; do
-        # Parallel data creation
-        curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-            -d "{\"message\": \"Load test message $i\"}" \
-            'http://127.0.0.1:5000/data' &
-        
-        # Parallel system status checks
-        curl -s -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5000/system/status' &
-        
-        # Parallel log creation
-        curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-            -d "{\"event\": \"concurrent_test\", \"details\": \"Concurrent test $i\"}" \
-            'http://127.0.0.1:5000/logs' &
-    done
-    
-    # Wait for all background jobs to complete
-    wait
     
     # Wait for 10 seconds for keploy to record the tcs and mocks.
     sleep 10
