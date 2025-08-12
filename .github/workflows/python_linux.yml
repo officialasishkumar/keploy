@@ -87,10 +87,8 @@ jobs:
       - name: Prepare email content and attachments
         id: prep-email
         run: |
-          # Create email body file
           BODY_FILE="summary_body.txt"
 
-          # Add Header
           echo "Python Linux Tests Report" > $BODY_FILE
           echo "" >> $BODY_FILE
           echo "Workflow Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $BODY_FILE
@@ -103,9 +101,8 @@ jobs:
 
           failed_count=0
           total_count=0
-          attachment_paths=""
+          failed_zips=() # Use an array to store zip file paths
 
-          # Process all summary files
           for summary_file in $(find all-results -type f -name 'summary.txt'); do
             total_count=$((total_count + 1))
             
@@ -119,13 +116,11 @@ jobs:
               STATUS_ICON="❌ Failed"
               failed_count=$((failed_count + 1))
               
-              # For failed jobs, zip the artifact directory with a descriptive name
               artifact_dir=$(dirname "$summary_file")
               zip_name="failed-${JOB_NAME}-${JOB_CONFIG}.zip"
               zip -r "$zip_name" "$artifact_dir"
-              attachment_paths="${attachment_paths} ${zip_name}"
+              failed_zips+=("$zip_name") # Add zip name to the array
             fi
-            # Append plain text summary line
             printf "%-20s | %-30s | %s\n" "$JOB_NAME" "$JOB_CONFIG" "$STATUS_ICON" >> $BODY_FILE
           done
 
@@ -134,8 +129,9 @@ jobs:
           passed_count=$((total_count - failed_count))
           echo "Total Tests: $total_count | Failed: $failed_count | Passed: $passed_count" >> $BODY_FILE
 
-          # Set outputs for the next step
-          echo "attachment_path=$(echo $attachment_paths | xargs)" >> $GITHUB_OUTPUT
+          # Join the array with commas to create a valid attachments string
+          attachment_paths=$(IFS=,; echo "${failed_zips[*]}")
+          echo "attachment_path=${attachment_paths}" >> $GITHUB_OUTPUT
 
           if [ $failed_count -gt 0 ]; then
             echo "email_subject=🚨 Python Tests FAILED ($failed_count/$total_count) - ${{ github.repository }} #${{ github.run_id }}" >> $GITHUB_OUTPUT
